@@ -131,3 +131,107 @@
 - 必要なコマンド
 - エラーが出ていた場合は原因と対応
 - GitHubにコミットする場合のコミットメッセージ案
+
+---
+
+## 開発ログ：2026-06-19
+
+### 今日決めたこと
+
+- アプリ名は **シフモン** に決定
+- Xcode上の Product Name は `Shifmon`
+- GitHubリポジトリ名は `shifmon-ios`
+- 開発方針は **SwiftUI / Xcode** で進める
+- 最初は自分用のiPhoneアプリとして作り、将来的に友人利用・App Store公開を目指す
+- 「今日の作業はここまで」と言ったら、その日の作業内容をREADME追記用Markdownとして整理する運用にする
+
+### 今日実装したこと
+
+- XcodeでiOSアプリプロジェクト `Shifmon` を作成
+- SwiftUI / SwiftData 構成でプロジェクトを作成
+- iPhone 17 Pro シミュレーターで初期アプリの起動を確認
+- GitHubに `shifmon-ios` リポジトリを作成
+- 初期プロジェクトをGitHubへpush
+- `README.md` を作成し、プロジェクト概要・機能予定・技術構成・開発方針を記載
+- `ContentView.swift` をテンプレート画面からシフモン用ホーム画面に変更
+- ホーム画面をGitHubへpush
+
+### 現在の仕様
+
+ホーム画面には以下を表示する。
+
+- アプリタイトル：シフモン
+- コンセプト文：働く予定を、ちょっと楽しみに。
+- 今月の見込み給料：¥0
+- 勤務時間：0時間
+- 次のシフト：未登録
+- 「シフトを追加する」ボタン
+- 「カレンダーを見る」ボタン
+- 今日のシフモン表示
+- 仮のキャラクターアイコン
+- シフトをこなすと経験値がたまり、シフモンが成長する説明文
+
+### 使用技術・開発環境
+
+- Mac
+- Xcode
+- Swift
+- SwiftUI
+- SwiftData
+- Git
+- GitHub
+- iPhone Simulator
+
+### 解決したエラー・詰まりポイント
+
+- Xcode新規作成画面で Next が押せなかった
+  - 原因：Organization Identifier が未入力、CloudKitが有効だった
+  - 対応：`com.seimu9` を入力し、CloudKitは一旦OFFにする方針にした
+
+- Gitコマンドで `fatal: not a git repository` が出た
+  - 原因：ターミナルがShifmonプロジェクトのフォルダに移動できていなかった
+  - 対応：`Shifmon.xcodeproj` があるフォルダへ移動してからGit操作を実行
+
+- Apple IDログインでエラーが出た
+  - 原因：Apple ID認証でパスワード入力に失敗
+  - 対応：実機確認は後回しにし、まずはシミュレーターで開発を進める方針にした
+
+### 未解決の課題
+
+- iPhone実機での動作確認はまだ未完了
+- Codexの導入はまだ未完了
+- シフトのデータモデルはまだ未作成
+- シフト追加画面はまだ未作成
+- SwiftDataへの実データ保存はまだ未実装
+- iPhone標準カレンダー連携はまだ未実装
+- スクリーンショット読み取り機能はまだ未実装
+- キャラクター育成機能はまだ仮表示のみ
+
+### 次回やること
+
+1. Codex導入を検討する
+2. シフト用データモデル `Shift` を作成する
+3. シフト追加画面 `AddShiftView` を作成する
+4. ホーム画面の「シフトを追加する」ボタンから追加画面へ遷移できるようにする
+5. SwiftDataでシフトを保存できるようにする
+6. 登録したシフトをホーム画面に反映する
+7. 変更内容をGitHubへcommit / pushする
+
+### 今日使った主なGitコマンド
+
+```bash
+git status
+git add README.md
+git commit -m "Add project README"
+git push
+
+git add Shifmon/ContentView.swift
+git commit -m "Add initial home screen"
+git push
+```
+
+### 今日のコミット
+
+- `Add project README`
+- `Add initial home screen`
+
