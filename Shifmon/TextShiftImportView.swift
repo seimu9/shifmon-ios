@@ -28,10 +28,16 @@ struct TextShiftCandidate: Identifiable {
         let end = endTimeText ?? "未定"
         return "\(start) 〜 \(end)"
     }
+
+    // 画面更新しても同じ候補を識別できるようにするキー
+    var importKey: String {
+        "\(displayDateText)-\(startTimeText ?? "nil")-\(endTimeText ?? "nil")-\(sourceLine)"
+    }
 }
 
 // LINE・メモなどのテキストからシフト候補を読み取る画面
 struct TextShiftImportView: View {
+    @Environment(\.modelContext) private var modelContext
     @Query(sort: \WorkPlace.createdAt, order: .reverse) private var workPlaces: [WorkPlace]
 
     @State private var inputText = """
@@ -49,6 +55,11 @@ struct TextShiftImportView: View {
 """
     @State private var targetMonth = Date()
     @State private var selectedWorkPlaceID: UUID?
+    @State private var selectedCandidateKeys: Set<String> = []
+
+    @State private var showAlert = false
+    @State private var alertTitle = ""
+    @State private var alertMessage = ""
 
     private var selectedWorkPlace: WorkPlace? {
         guard let selectedWorkPlaceID else { return workPlaces.first }
@@ -63,6 +74,10 @@ struct TextShiftImportView: View {
         )
     }
 
+    private var selectedCandidates: [TextShiftCandidate] {
+        candidates.filter { selectedCandidateKeys.contains($0.importKey) }
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
@@ -71,6 +86,7 @@ struct TextShiftImportView: View {
                 targetMonthSection
                 inputSection
                 candidateSection
+                bulkRegisterSection
             }
             .padding()
         }
@@ -81,6 +97,21 @@ struct TextShiftImportView: View {
             if selectedWorkPlaceID == nil {
                 selectedWorkPlaceID = workPlaces.first?.id
             }
+            syncSelectionWithCandidates(selectAll: true)
+        }
+        .onChange(of: inputText) {
+            syncSelectionWithCandidates(selectAll: true)
+        }
+        .onChange(of: targetMonth) {
+            syncSelectionWithCandidates(selectAll: true)
+        }
+        .onChange(of: selectedWorkPlaceID) {
+            syncSelectionWithCandidates(selectAll: true)
+        }
+        .alert(alertTitle, isPresented: $showAlert) {
+            Button("OK") {}
+        } message: {
+            Text(alertMessage)
         }
     }
 
@@ -94,7 +125,7 @@ struct TextShiftImportView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
-            Text("全日系ワードは、選択したバイト先の開店時間〜閉店時間として読み取ります。")
+            Text("チェックを外した候補は一括登録されません。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -175,9 +206,29 @@ struct TextShiftImportView: View {
 
                 Spacer()
 
-                Text("\(candidates.count)件")
+                Text("\(selectedCandidates.count)/\(candidates.count)件 選択中")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            if !candidates.isEmpty {
+                HStack(spacing: 12) {
+                    Button {
+                        selectAllCandidates()
+                    } label: {
+                        Label("すべて選択", systemImage: "checkmark.circle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button {
+                        deselectAllCandidates()
+                    } label: {
+                        Label("すべて解除", systemImage: "circle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                }
             }
 
             if candidates.isEmpty {
@@ -191,25 +242,203 @@ struct TextShiftImportView: View {
             } else {
                 VStack(spacing: 10) {
                     ForEach(candidates) { candidate in
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(candidate.displayDateText)
-                                .font(.headline)
-
-                            Label(candidate.displayTimeText, systemImage: "clock")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-
-                            Text("元テキスト：\(candidate.sourceLine)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color(.secondarySystemGroupedBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        candidateRow(candidate)
                     }
                 }
             }
+        }
+    }
+
+    private func candidateRow(_ candidate: TextShiftCandidate) -> some View {
+        let isSelected = selectedCandidateKeys.contains(candidate.importKey)
+
+        return Button {
+            toggleCandidate(candidate)
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(isSelected ? .blue : .secondary)
+                    .padding(.top, 2)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(candidate.displayDateText)
+                        .font(.headline)
+
+                    Label(candidate.displayTimeText, systemImage: "clock")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    Text("元テキスト：\(candidate.sourceLine)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+            }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var bulkRegisterSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                registerSelectedCandidates()
+            } label: {
+                Label("選択した候補を一括登録", systemImage: "tray.and.arrow.down.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(selectedCandidates.isEmpty || selectedWorkPlace == nil)
+
+            Text("登録するとShifmon内に保存され、iPhone標準カレンダーにも追加されます。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func syncSelectionWithCandidates(selectAll: Bool) {
+        let keys = Set(candidates.map { $0.importKey })
+
+        if selectAll {
+            selectedCandidateKeys = keys
+        } else {
+            selectedCandidateKeys = selectedCandidateKeys.intersection(keys)
+        }
+    }
+
+    private func selectAllCandidates() {
+        selectedCandidateKeys = Set(candidates.map { $0.importKey })
+    }
+
+    private func deselectAllCandidates() {
+        selectedCandidateKeys.removeAll()
+    }
+
+    private func toggleCandidate(_ candidate: TextShiftCandidate) {
+        if selectedCandidateKeys.contains(candidate.importKey) {
+            selectedCandidateKeys.remove(candidate.importKey)
+        } else {
+            selectedCandidateKeys.insert(candidate.importKey)
+        }
+    }
+
+    private func registerSelectedCandidates() {
+        guard let selectedWorkPlace else {
+            alertTitle = "登録できません"
+            alertMessage = "先に対象バイト先を選択してください。"
+            showAlert = true
+            return
+        }
+
+        let targets = selectedCandidates
+
+        guard !targets.isEmpty else {
+            alertTitle = "登録できません"
+            alertMessage = "登録する候補を選択してください。"
+            showAlert = true
+            return
+        }
+
+        var registeredCount = 0
+        var skippedCount = 0
+
+        for candidate in targets {
+            guard let startText = candidate.startTimeText,
+                  let endText = candidate.endTimeText,
+                  let startTime = makeDateTime(baseDate: candidate.date, timeText: startText),
+                  var endTime = makeDateTime(baseDate: candidate.date, timeText: endText) else {
+                skippedCount += 1
+                continue
+            }
+
+            if endTime <= startTime {
+                endTime = Calendar.current.date(byAdding: .day, value: 1, to: endTime) ?? endTime
+            }
+
+            let breakMinutes = BreakRuleHelper.automaticBreakMinutes(
+                startTime: startTime,
+                endTime: endTime
+            )
+
+            let newShift = WorkShift(
+                workplaceName: selectedWorkPlace.name,
+                startTime: startTime,
+                endTime: endTime,
+                hourlyWage: selectedWorkPlace.hourlyWage,
+                breakMinutes: breakMinutes,
+                memo: "テキスト読み取りから登録\n元テキスト：\(candidate.sourceLine)"
+            )
+
+            modelContext.insert(newShift)
+
+            CalendarEventManager.shared.addShiftToCalendar(
+                workplaceName: selectedWorkPlace.name,
+                startTime: startTime,
+                endTime: endTime,
+                memo: newShift.memo
+            ) { eventIdentifier in
+                if let eventIdentifier {
+                    newShift.calendarEventIdentifier = eventIdentifier
+                    try? modelContext.save()
+                }
+            }
+
+            registeredCount += 1
+        }
+
+        do {
+            try modelContext.save()
+
+            alertTitle = "登録しました"
+            if skippedCount == 0 {
+                alertMessage = "\(registeredCount)件のシフトを登録しました。"
+            } else {
+                alertMessage = "\(registeredCount)件を登録しました。\n\(skippedCount)件は開始・終了時刻が不足していたためスキップしました。"
+            }
+            showAlert = true
+        } catch {
+            alertTitle = "登録に失敗しました"
+            alertMessage = "保存中にエラーが発生しました。"
+            showAlert = true
+        }
+    }
+
+    private func makeDateTime(baseDate: Date, timeText: String) -> Date? {
+        let parts = timeText.split(separator: ":").map(String.init)
+
+        guard let hourText = parts[safe: 0],
+              let minuteText = parts[safe: 1],
+              let rawHour = Int(hourText),
+              let minute = Int(minuteText),
+              rawHour >= 0,
+              rawHour <= 29,
+              minute >= 0,
+              minute <= 59 else {
+            return nil
+        }
+
+        let additionalDays = rawHour / 24
+        let hour = rawHour % 24
+
+        var components = Calendar.current.dateComponents([.year, .month, .day], from: baseDate)
+        components.hour = hour
+        components.minute = minute
+
+        guard let date = Calendar.current.date(from: components) else {
+            return nil
+        }
+
+        if additionalDays > 0 {
+            return Calendar.current.date(byAdding: .day, value: additionalDays, to: date)
+        } else {
+            return date
         }
     }
 }
@@ -358,16 +587,12 @@ enum TextShiftParser {
                 let end: String?
 
                 if left.isEmpty {
-                    // 例：-1600 / 〜16:00
-                    // 開始側が空なら、バイト先の開店時間を使う
                     start = workPlace?.openingTimeText
                 } else {
                     start = extractLastTime(from: left)
                 }
 
                 if right.isEmpty || isLastText(right) {
-                    // 例：1710- / 17:10〜 / 1710-ラスト
-                    // 終了側が空、またはラスト系ワードなら、バイト先の閉店時間を使う
                     end = workPlace?.closingTimeText
                 } else {
                     end = extractFirstTime(from: right)
