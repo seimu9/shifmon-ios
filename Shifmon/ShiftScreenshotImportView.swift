@@ -46,6 +46,19 @@ struct ShiftScreenshotImportView: View {
     @State private var isRecognizing = false
     @State private var errorMessage: String?
 
+
+    private var screenshotCandidatesText: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.dateFormat = "yyyy/MM/dd"
+
+        return candidates
+            .map { candidate in
+                "\(formatter.string(from: candidate.date)) \(candidate.startTimeText)-\(candidate.endTimeText)"
+            }
+            .joined(separator: "\n")
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
@@ -54,6 +67,19 @@ struct ShiftScreenshotImportView: View {
 
                 if let selectedImage {
                     imagePreviewSection(selectedImage)
+                }
+
+
+                if !candidates.isEmpty {
+                    NavigationLink {
+                        TextShiftImportView(initialText: screenshotCandidatesText)
+                    } label: {
+                        Label("抽出候補を一括登録画面へ", systemImage: "text.viewfinder")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
 
                 candidateSection
