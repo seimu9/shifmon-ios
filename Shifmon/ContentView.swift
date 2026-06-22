@@ -415,7 +415,11 @@ struct ShiftListView: View {
                 )
             } else {
                 ForEach(shifts, id: \.id) { shift in
-                    ShiftRowView(shift: shift)
+                    NavigationLink {
+                        EditShiftView(shift: shift)
+                    } label: {
+                        ShiftRowView(shift: shift)
+                    }
                 }
                 .onDelete(perform: deleteShifts)
             }
