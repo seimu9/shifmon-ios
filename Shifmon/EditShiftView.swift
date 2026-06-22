@@ -78,6 +78,12 @@ struct EditShiftView: View {
         }
         .navigationTitle("シフト編集")
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: startTime) {
+            applyAutomaticBreakTime()
+        }
+        .onChange(of: endTime) {
+            applyAutomaticBreakTime()
+        }
         .alert("保存できません", isPresented: $showAlert) {
             Button("OK") {}
         } message: {
@@ -85,7 +91,17 @@ struct EditShiftView: View {
         }
     }
 
+    private func applyAutomaticBreakTime() {
+        let autoBreakMinutes = BreakRuleHelper.automaticBreakMinutes(
+            startTime: startTime,
+            endTime: endTime
+        )
+        breakMinutes = String(autoBreakMinutes)
+    }
+
     private func updateShift() {
+        applyAutomaticBreakTime()
+
         let trimmedWorkplaceName = workplaceName.trimmingCharacters(in: .whitespacesAndNewlines)
         let finalWorkplaceName = trimmedWorkplaceName.isEmpty ? "バイト先未設定" : trimmedWorkplaceName
 

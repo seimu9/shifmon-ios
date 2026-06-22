@@ -196,6 +196,16 @@ struct ContentView: View {
             .buttonStyle(.bordered)
 
             NavigationLink {
+                WorkPlaceListView()
+            } label: {
+                Label("バイト先を管理する", systemImage: "building.2.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+            }
+            .buttonStyle(.bordered)
+
+            NavigationLink {
                 CalendarMonthView()
             } label: {
                 Label("カレンダーを見る", systemImage: "calendar")
@@ -350,6 +360,15 @@ struct AddShiftView: View {
         }
         .navigationTitle("シフト追加")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            applyAutomaticBreakTime()
+        }
+        .onChange(of: startTime) {
+            applyAutomaticBreakTime()
+        }
+        .onChange(of: endTime) {
+            applyAutomaticBreakTime()
+        }
         .alert("保存できません", isPresented: $showAlert) {
             Button("OK") {}
         } message: {
@@ -357,7 +376,17 @@ struct AddShiftView: View {
         }
     }
 
+    private func applyAutomaticBreakTime() {
+        let autoBreakMinutes = BreakRuleHelper.automaticBreakMinutes(
+            startTime: startTime,
+            endTime: endTime
+        )
+        breakMinutes = String(autoBreakMinutes)
+    }
+
     private func saveShift() {
+        applyAutomaticBreakTime()
+
         let trimmedWorkplaceName = workplaceName.trimmingCharacters(in: .whitespacesAndNewlines)
         let finalWorkplaceName = trimmedWorkplaceName.isEmpty ? "バイト先未設定" : trimmedWorkplaceName
 
@@ -511,6 +540,24 @@ struct SummaryCard: View {
 }
 
 // 日付・金額・勤務時間の表示をまとめるヘルパー
+// 労働時間から休憩時間を自動計算するヘルパー
+enum BreakRuleHelper {
+    static func automaticBreakMinutes(startTime: Date, endTime: Date) -> Int {
+        let totalMinutes = Int(endTime.timeIntervalSince(startTime) / 60)
+
+        // シフモン内ルール：
+        // 6時間以上〜8時間未満：45分
+        // 8時間以上：60分
+        if totalMinutes >= 8 * 60 {
+            return 60
+        } else if totalMinutes >= 6 * 60 {
+            return 45
+        } else {
+            return 0
+        }
+    }
+}
+
 enum FormatHelper {
     static func yenText(_ amount: Int) -> String {
         let formatter = NumberFormatter()

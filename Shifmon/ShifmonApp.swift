@@ -14,6 +14,6 @@ struct ShifmonApp: App {
         WindowGroup {
             ContentView()
         }
-        .modelContainer(for: WorkShift.self)
+        .modelContainer(for: [WorkShift.self, WorkPlace.self])
     }
 }
