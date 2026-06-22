@@ -450,6 +450,14 @@ struct AddShiftView: View {
 
         do {
             try modelContext.save()
+
+            CalendarEventManager.shared.addShiftToCalendar(
+                workplaceName: finalWorkplaceName,
+                startTime: startTime,
+                endTime: endTime,
+                memo: memo
+            )
+
             dismiss()
         } catch {
             alertMessage = "保存中にエラーが発生しました。"

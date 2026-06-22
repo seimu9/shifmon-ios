@@ -398,6 +398,9 @@
 				DEVELOPMENT_TEAM = QF2GC66JX3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "シフトをiPhone標準カレンダーに登録するために使用します。";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "シフトをiPhone標準カレンダーに登録するために使用します。";
+				INFOPLIST_KEY_NSCalendarsWriteOnlyAccessUsageDescription = "シフトをiPhone標準カレンダーに登録するために使用します。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -430,6 +433,9 @@
 				DEVELOPMENT_TEAM = QF2GC66JX3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "シフトをiPhone標準カレンダーに登録するために使用します。";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "シフトをiPhone標準カレンダーに登録するために使用します。";
+				INFOPLIST_KEY_NSCalendarsWriteOnlyAccessUsageDescription = "シフトをiPhone標準カレンダーに登録するために使用します。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -459,6 +465,9 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "シフトをiPhone標準カレンダーに登録するために使用します。";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "シフトをiPhone標準カレンダーに登録するために使用します。";
+				INFOPLIST_KEY_NSCalendarsWriteOnlyAccessUsageDescription = "シフトをiPhone標準カレンダーに登録するために使用します。";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.seimu9.ShifmonTests;
@@ -480,6 +489,9 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "シフトをiPhone標準カレンダーに登録するために使用します。";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "シフトをiPhone標準カレンダーに登録するために使用します。";
+				INFOPLIST_KEY_NSCalendarsWriteOnlyAccessUsageDescription = "シフトをiPhone標準カレンダーに登録するために使用します。";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.seimu9.ShifmonTests;
@@ -500,6 +512,9 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "シフトをiPhone標準カレンダーに登録するために使用します。";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "シフトをiPhone標準カレンダーに登録するために使用します。";
+				INFOPLIST_KEY_NSCalendarsWriteOnlyAccessUsageDescription = "シフトをiPhone標準カレンダーに登録するために使用します。";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.seimu9.ShifmonUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -519,6 +534,9 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "シフトをiPhone標準カレンダーに登録するために使用します。";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "シフトをiPhone標準カレンダーに登録するために使用します。";
+				INFOPLIST_KEY_NSCalendarsWriteOnlyAccessUsageDescription = "シフトをiPhone標準カレンダーに登録するために使用します。";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.seimu9.ShifmonUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
