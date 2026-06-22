@@ -185,6 +185,16 @@ struct ContentView: View {
             }
             .buttonStyle(.borderedProminent)
 
+            NavigationLink {
+                ShiftListView()
+            } label: {
+                Label("シフト一覧を見る", systemImage: "list.bullet")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+            }
+            .buttonStyle(.bordered)
+
             Button {
                 // TODO: カレンダー画面へ遷移する
             } label: {
@@ -200,8 +210,19 @@ struct ContentView: View {
     // 登録済みシフトの簡易表示
     private var registeredShiftsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("登録済みシフト")
-                .font(.headline)
+            HStack {
+                Text("登録済みシフト")
+                    .font(.headline)
+
+                Spacer()
+
+                NavigationLink {
+                    ShiftListView()
+                } label: {
+                    Text("すべて見る")
+                        .font(.subheadline)
+                }
+            }
 
             ForEach(recentShifts, id: \.id) { shift in
                 HStack {
@@ -255,37 +276,19 @@ struct ContentView: View {
     }
 
     private func yenText(_ amount: Int) -> String {
-        let formatter = NumberFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "JPY"
-        formatter.maximumFractionDigits = 0
-
-        return formatter.string(from: NSNumber(value: amount)) ?? "¥\(amount)"
+        FormatHelper.yenText(amount)
     }
 
     private func workHourText(_ minutes: Int) -> String {
-        let hours = Double(minutes) / 60.0
-
-        if hours.truncatingRemainder(dividingBy: 1) == 0 {
-            return "\(Int(hours))時間"
-        } else {
-            return String(format: "%.1f時間", hours)
-        }
+        FormatHelper.workHourText(minutes)
     }
 
     private func dateTimeText(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
-        formatter.dateFormat = "M/d(E) HH:mm"
-        return formatter.string(from: date)
+        FormatHelper.dateTimeText(date)
     }
 
     private func timeText(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
-        formatter.dateFormat = "HH:mm"
-        return formatter.string(from: date)
+        FormatHelper.timeText(date)
     }
 }
 
@@ -397,6 +400,85 @@ struct AddShiftView: View {
     }
 }
 
+// シフト一覧画面
+struct ShiftListView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Query(sort: \WorkShift.startTime, order: .reverse) private var shifts: [WorkShift]
+
+    var body: some View {
+        List {
+            if shifts.isEmpty {
+                ContentUnavailableView(
+                    "シフトがありません",
+                    systemImage: "calendar.badge.exclamationmark",
+                    description: Text("まずはシフトを追加してみよう")
+                )
+            } else {
+                ForEach(shifts, id: \.id) { shift in
+                    ShiftRowView(shift: shift)
+                }
+                .onDelete(perform: deleteShifts)
+            }
+        }
+        .navigationTitle("シフト一覧")
+        .toolbar {
+            EditButton()
+        }
+    }
+
+    private func deleteShifts(at offsets: IndexSet) {
+        for index in offsets {
+            let shift = shifts[index]
+            modelContext.delete(shift)
+        }
+
+        do {
+            try modelContext.save()
+        } catch {
+            print("削除に失敗しました: \(error.localizedDescription)")
+        }
+    }
+}
+
+// シフト一覧の1行
+struct ShiftRowView: View {
+    let shift: WorkShift
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(shift.workplaceName)
+                    .font(.headline)
+
+                Spacer()
+
+                Text(FormatHelper.yenText(shift.estimatedPay))
+                    .font(.subheadline)
+                    .fontWeight(.bold)
+            }
+
+            Text("\(FormatHelper.dateTimeText(shift.startTime)) 〜 \(FormatHelper.timeText(shift.endTime))")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 12) {
+                Label(FormatHelper.workHourText(shift.workMinutes), systemImage: "clock")
+                Label("時給 \(FormatHelper.yenText(shift.hourlyWage))", systemImage: "yensign.circle")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            if !shift.memo.isEmpty {
+                Text(shift.memo)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 2)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+}
+
 // 給料や勤務時間を表示するカード
 struct SummaryCard: View {
     let title: String
@@ -421,6 +503,43 @@ struct SummaryCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+}
+
+// 日付・金額・勤務時間の表示をまとめるヘルパー
+enum FormatHelper {
+    static func yenText(_ amount: Int) -> String {
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "JPY"
+        formatter.maximumFractionDigits = 0
+
+        return formatter.string(from: NSNumber(value: amount)) ?? "¥\(amount)"
+    }
+
+    static func workHourText(_ minutes: Int) -> String {
+        let hours = Double(minutes) / 60.0
+
+        if hours.truncatingRemainder(dividingBy: 1) == 0 {
+            return "\(Int(hours))時間"
+        } else {
+            return String(format: "%.1f時間", hours)
+        }
+    }
+
+    static func dateTimeText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.dateFormat = "M/d(E) HH:mm"
+        return formatter.string(from: date)
+    }
+
+    static func timeText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
     }
 }
 
