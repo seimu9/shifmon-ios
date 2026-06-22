@@ -245,7 +245,7 @@ enum TextShiftParser {
                     end: workPlace.closingTimeText
                 )
             } else {
-                timeRange = extractTimeRange(from: parsed.body)
+                timeRange = extractTimeRange(from: parsed.body, workPlace: workPlace)
             }
 
             guard let timeRange else {
@@ -340,7 +340,10 @@ enum TextShiftParser {
         return nil
     }
 
-    private static func extractTimeRange(from text: String) -> (start: String?, end: String?)? {
+    private static func extractTimeRange(
+        from text: String,
+        workPlace: WorkPlace?
+    ) -> (start: String?, end: String?)? {
         let normalized = normalize(text)
             .replacingOccurrences(of: " ", with: "")
 
@@ -351,8 +354,24 @@ enum TextShiftParser {
                 let left = String(normalized[..<range.lowerBound])
                 let right = String(normalized[range.upperBound...])
 
-                let start = extractLastTime(from: left)
-                let end = extractFirstTime(from: right)
+                let start: String?
+                let end: String?
+
+                if left.isEmpty {
+                    // 例：-1600 / 〜16:00
+                    // 開始側が空なら、バイト先の開店時間を使う
+                    start = workPlace?.openingTimeText
+                } else {
+                    start = extractLastTime(from: left)
+                }
+
+                if right.isEmpty || isLastText(right) {
+                    // 例：1710- / 17:10〜 / 1710-ラスト
+                    // 終了側が空、またはラスト系ワードなら、バイト先の閉店時間を使う
+                    end = workPlace?.closingTimeText
+                } else {
+                    end = extractFirstTime(from: right)
+                }
 
                 if start != nil || end != nil {
                     return (start, end)
@@ -367,10 +386,31 @@ enum TextShiftParser {
         }
 
         if times.count == 1 {
-            return (times[0], nil)
+            return (times[0], workPlace?.closingTimeText)
         }
 
         return nil
+    }
+
+    private static func isLastText(_ text: String) -> Bool {
+        let normalizedText = normalize(text)
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "")
+
+        let keywords = [
+            "ラスト",
+            "last",
+            "close",
+            "closing",
+            "cl",
+            "締め",
+            "閉店",
+            "クローズ"
+        ]
+
+        return keywords.contains { keyword in
+            normalizedText.contains(keyword.lowercased())
+        }
     }
 
     private static func extractFirstTime(from text: String) -> String? {
