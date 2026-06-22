@@ -39,8 +39,20 @@ struct TextShiftCandidate: Identifiable {
 struct TextShiftImportView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \WorkPlace.createdAt, order: .reverse) private var workPlaces: [WorkPlace]
+    @Query(sort: \WorkShift.startTime) private var existingShifts: [WorkShift]
 
-    @State private var inputText = """
+    @State private var inputText: String
+    @State private var targetMonth = Date()
+    @State private var selectedWorkPlaceID: UUID?
+    @State private var selectedCandidateKeys: Set<String> = []
+
+    @State private var showAlert = false
+    @State private var alertTitle = ""
+    @State private var alertMessage = ""
+
+    @State private var lastRegisteredCount = 0
+
+    private static let defaultInputText = """
 一応ここに7月前半の出勤可能日置いときます！
 
 3 全日
@@ -53,13 +65,16 @@ struct TextShiftImportView: View {
 13 -2000
 14 ol
 """
-    @State private var targetMonth = Date()
-    @State private var selectedWorkPlaceID: UUID?
-    @State private var selectedCandidateKeys: Set<String> = []
 
-    @State private var showAlert = false
-    @State private var alertTitle = ""
-    @State private var alertMessage = ""
+    init(initialText: String? = nil) {
+        let trimmedText = initialText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        if trimmedText.isEmpty {
+            _inputText = State(initialValue: Self.defaultInputText)
+        } else {
+            _inputText = State(initialValue: trimmedText)
+        }
+    }
 
     private var selectedWorkPlace: WorkPlace? {
         guard let selectedWorkPlaceID else { return workPlaces.first }
@@ -78,6 +93,14 @@ struct TextShiftImportView: View {
         candidates.filter { selectedCandidateKeys.contains($0.importKey) }
     }
 
+    private var selectableCandidates: [TextShiftCandidate] {
+        candidates.filter { !isDuplicateCandidate($0) }
+    }
+
+    private var selectedRegistrableCandidates: [TextShiftCandidate] {
+        selectedCandidates.filter { !isDuplicateCandidate($0) }
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
@@ -87,6 +110,7 @@ struct TextShiftImportView: View {
                 inputSection
                 candidateSection
                 bulkRegisterSection
+                postRegisterActionSection
             }
             .padding()
         }
@@ -206,7 +230,7 @@ struct TextShiftImportView: View {
 
                 Spacer()
 
-                Text("\(selectedCandidates.count)/\(candidates.count)件 選択中")
+                Text("\(selectedRegistrableCandidates.count)/\(candidates.count)件 選択中")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -251,14 +275,15 @@ struct TextShiftImportView: View {
 
     private func candidateRow(_ candidate: TextShiftCandidate) -> some View {
         let isSelected = selectedCandidateKeys.contains(candidate.importKey)
+        let isDuplicate = isDuplicateCandidate(candidate)
 
         return Button {
             toggleCandidate(candidate)
         } label: {
             HStack(alignment: .top, spacing: 12) {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                Image(systemName: isDuplicate ? "checkmark.seal.fill" : (isSelected ? "checkmark.circle.fill" : "circle"))
                     .font(.title3)
-                    .foregroundStyle(isSelected ? .blue : .secondary)
+                    .foregroundStyle(isDuplicate ? Color.orange : (isSelected ? Color.blue : Color.secondary))
                     .padding(.top, 2)
 
                 VStack(alignment: .leading, spacing: 6) {
@@ -272,6 +297,12 @@ struct TextShiftImportView: View {
                     Text("元テキスト：\(candidate.sourceLine)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+
+                    if isDuplicate {
+                        Label("登録済みのためスキップ", systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
                 }
 
                 Spacer()
@@ -280,6 +311,7 @@ struct TextShiftImportView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(.secondarySystemGroupedBackground))
             .clipShape(RoundedRectangle(cornerRadius: 16))
+            .opacity(isDuplicate ? 0.65 : 1.0)
         }
         .buttonStyle(.plain)
     }
@@ -295,7 +327,7 @@ struct TextShiftImportView: View {
                     .padding()
             }
             .buttonStyle(.borderedProminent)
-            .disabled(selectedCandidates.isEmpty || selectedWorkPlace == nil)
+            .disabled(selectedRegistrableCandidates.isEmpty || selectedWorkPlace == nil)
 
             Text("登録するとShifmon内に保存され、iPhone標準カレンダーにも追加されます。")
                 .font(.caption)
@@ -303,8 +335,48 @@ struct TextShiftImportView: View {
         }
     }
 
+
+    private var postRegisterActionSection: some View {
+        Group {
+            if lastRegisteredCount > 0 {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("登録完了")
+                        .font(.headline)
+
+                    Text("\(lastRegisteredCount)件のシフトを登録しました。確認画面に移動できます。")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    NavigationLink {
+                        ShiftListView()
+                    } label: {
+                        Label("シフト一覧で確認", systemImage: "list.bullet.rectangle")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                    }
+                    .buttonStyle(.bordered)
+
+                    NavigationLink {
+                        CalendarMonthView()
+                    } label: {
+                        Label("カレンダーで確認", systemImage: "calendar")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(.secondarySystemGroupedBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+            }
+        }
+    }
+
     private func syncSelectionWithCandidates(selectAll: Bool) {
-        let keys = Set(candidates.map { $0.importKey })
+        let keys = Set(selectableCandidates.map { $0.importKey })
 
         if selectAll {
             selectedCandidateKeys = keys
@@ -314,7 +386,7 @@ struct TextShiftImportView: View {
     }
 
     private func selectAllCandidates() {
-        selectedCandidateKeys = Set(candidates.map { $0.importKey })
+        selectedCandidateKeys = Set(selectableCandidates.map { $0.importKey })
     }
 
     private func deselectAllCandidates() {
@@ -322,6 +394,13 @@ struct TextShiftImportView: View {
     }
 
     private func toggleCandidate(_ candidate: TextShiftCandidate) {
+        if isDuplicateCandidate(candidate) {
+            alertTitle = "登録済みです"
+            alertMessage = "同じバイト先・同じ開始時刻・同じ終了時刻のシフトがすでに登録されています。"
+            showAlert = true
+            return
+        }
+
         if selectedCandidateKeys.contains(candidate.importKey) {
             selectedCandidateKeys.remove(candidate.importKey)
         } else {
@@ -337,7 +416,7 @@ struct TextShiftImportView: View {
             return
         }
 
-        let targets = selectedCandidates
+        let targets = selectedRegistrableCandidates
 
         guard !targets.isEmpty else {
             alertTitle = "登録できません"
@@ -396,6 +475,9 @@ struct TextShiftImportView: View {
         do {
             try modelContext.save()
 
+            lastRegisteredCount = registeredCount
+            syncSelectionWithCandidates(selectAll: false)
+
             alertTitle = "登録しました"
             if skippedCount == 0 {
                 alertMessage = "\(registeredCount)件のシフトを登録しました。"
@@ -408,6 +490,38 @@ struct TextShiftImportView: View {
             alertMessage = "保存中にエラーが発生しました。"
             showAlert = true
         }
+    }
+
+    private func isDuplicateCandidate(_ candidate: TextShiftCandidate) -> Bool {
+        guard let selectedWorkPlace,
+              let dateTimes = makeDateTimes(for: candidate) else {
+            return false
+        }
+
+        return existingShifts.contains { shift in
+            shift.workplaceName == selectedWorkPlace.name
+            && isSameMinute(shift.startTime, dateTimes.startTime)
+            && isSameMinute(shift.endTime, dateTimes.endTime)
+        }
+    }
+
+    private func makeDateTimes(for candidate: TextShiftCandidate) -> (startTime: Date, endTime: Date)? {
+        guard let startText = candidate.startTimeText,
+              let endText = candidate.endTimeText,
+              let startTime = makeDateTime(baseDate: candidate.date, timeText: startText),
+              var endTime = makeDateTime(baseDate: candidate.date, timeText: endText) else {
+            return nil
+        }
+
+        if endTime <= startTime {
+            endTime = Calendar.current.date(byAdding: .day, value: 1, to: endTime) ?? endTime
+        }
+
+        return (startTime, endTime)
+    }
+
+    private func isSameMinute(_ lhs: Date, _ rhs: Date) -> Bool {
+        Calendar.current.compare(lhs, to: rhs, toGranularity: .minute) == .orderedSame
     }
 
     private func makeDateTime(baseDate: Date, timeText: String) -> Date? {
@@ -457,8 +571,10 @@ enum TextShiftParser {
             .components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+            .filter { !isNoiseLine($0) }
 
         var candidates: [TextShiftCandidate] = []
+        var seenCandidateKeys: Set<String> = []
 
         for line in lines {
             guard let parsed = extractDayAndBody(from: line, defaultYearMonth: inferredYearMonth) else {
@@ -489,6 +605,14 @@ enum TextShiftParser {
                 continue
             }
 
+            let candidateKey = "\(parsed.year)-\(parsed.month)-\(parsed.day)-\(timeRange.start ?? "")-\(timeRange.end ?? "")"
+
+            if seenCandidateKeys.contains(candidateKey) {
+                continue
+            }
+
+            seenCandidateKeys.insert(candidateKey)
+
             candidates.append(
                 TextShiftCandidate(
                     date: date,
@@ -500,6 +624,46 @@ enum TextShiftParser {
         }
 
         return candidates.sorted { $0.date < $1.date }
+    }
+
+    private static func isNoiseLine(_ line: String) -> Bool {
+        let normalizedLine = normalize(line)
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "")
+
+        if normalizedLine.isEmpty {
+            return true
+        }
+
+        let noiseWords = [
+            "テキスト読み取り",
+            "すべて選択",
+            "すべて解除",
+            "抽出した候補",
+            "選択中",
+            "登録済み",
+            "元テキスト",
+            "シフト候補",
+            "一括登録",
+            "月度"
+        ]
+
+        if noiseWords.contains(where: { normalizedLine.contains($0.lowercased()) }) {
+            return true
+        }
+
+        // 例：12:10 / 10:00〜23:00 のような「時刻だけの行」は、
+        // 日付行ではないので除外する
+        if firstMatch(normalizedLine, pattern: "^\\d{1,2}:\\d{1,2}([\\-〜～~]\\d{1,2}:\\d{1,2})?$") != nil {
+            return true
+        }
+
+        // 例：984 / 202607 みたいな数字だけの行は誤爆しやすいので除外
+        if firstMatch(normalizedLine, pattern: "^\\d{3,}$") != nil {
+            return true
+        }
+
+        return false
     }
 
     private static func isFullDayText(_ body: String, workPlace: WorkPlace?) -> Bool {
@@ -545,7 +709,10 @@ enum TextShiftParser {
         from line: String,
         defaultYearMonth: (year: Int, month: Int)
     ) -> (year: Int, month: Int, day: Int, body: String)? {
-        if let match = firstMatch(line, pattern: "^(\\d{4})[/-](\\d{1,2})[/-](\\d{1,2})\\s*(.*)$"),
+        let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // 例：2026/7/14(火) 1410-2000
+        if let match = firstMatch(trimmedLine, pattern: "^(\\d{4})[/-](\\d{1,2})[/-](\\d{1,2})(?:\\([^)]*\\))?\\s*(.*)$"),
            match.count >= 5,
            let year = Int(match[1]),
            let month = Int(match[2]),
@@ -553,17 +720,32 @@ enum TextShiftParser {
             return (year, month, day, match[4])
         }
 
-        if let match = firstMatch(line, pattern: "^(\\d{1,2})[/-](\\d{1,2})\\s*(.*)$"),
+        // 例：7/14(火) 1410-2000
+        if let match = firstMatch(trimmedLine, pattern: "^(\\d{1,2})[/-](\\d{1,2})(?:\\([^)]*\\))?\\s*(.*)$"),
            match.count >= 4,
            let month = Int(match[1]),
            let day = Int(match[2]) {
             return (defaultYearMonth.year, month, day, match[3])
         }
 
-        if let match = firstMatch(line, pattern: "^(\\d{1,2})\\s*日?\\s*(.*)$"),
+        // 例：
+        // 14 1410-2000
+        // 14日 14:10-20:00
+        // 14(火) 全日
+        // 14ol
+        //
+        // ただし 12:10 や 984 は日付として扱わない
+        if let match = firstMatch(trimmedLine, pattern: "^(\\d{1,2})(?![:\\d])\\s*(?:日)?(?:\\([^)]*\\))?\\s*(.*)$"),
            match.count >= 3,
            let day = Int(match[1]) {
-            return (defaultYearMonth.year, defaultYearMonth.month, day, match[2])
+            let body = match[2].trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // 10時〜23時 のような時刻行を「10日」と誤認しないための保険
+            if body.hasPrefix("時") || body.hasPrefix(":") {
+                return nil
+            }
+
+            return (defaultYearMonth.year, defaultYearMonth.month, day, body)
         }
 
         return nil
@@ -768,12 +950,30 @@ enum TextShiftParser {
     }
 
     private static func makeDate(year: Int, month: Int, day: Int) -> Date? {
+        guard (1...12).contains(month),
+              (1...31).contains(day) else {
+            return nil
+        }
+
         var components = DateComponents()
+        components.calendar = Calendar.current
         components.year = year
         components.month = month
         components.day = day
 
-        return Calendar.current.date(from: components)
+        guard let date = Calendar.current.date(from: components) else {
+            return nil
+        }
+
+        let checked = Calendar.current.dateComponents([.year, .month, .day], from: date)
+
+        guard checked.year == year,
+              checked.month == month,
+              checked.day == day else {
+            return nil
+        }
+
+        return date
     }
 
     private static func normalize(_ text: String) -> String {
