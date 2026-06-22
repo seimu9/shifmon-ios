@@ -6,8 +6,80 @@
 //
 
 import SwiftUI
+import SwiftData
+
+// シフト情報を保存するデータモデル
+@Model
+final class WorkShift {
+    var id: UUID
+    var workplaceName: String
+    var startTime: Date
+    var endTime: Date
+    var hourlyWage: Int
+    var breakMinutes: Int
+    var memo: String
+    var createdAt: Date
+
+    init(
+        workplaceName: String,
+        startTime: Date,
+        endTime: Date,
+        hourlyWage: Int,
+        breakMinutes: Int,
+        memo: String = ""
+    ) {
+        self.id = UUID()
+        self.workplaceName = workplaceName
+        self.startTime = startTime
+        self.endTime = endTime
+        self.hourlyWage = hourlyWage
+        self.breakMinutes = breakMinutes
+        self.memo = memo
+        self.createdAt = Date()
+    }
+
+    // 休憩時間を引いた実働時間（分）
+    var workMinutes: Int {
+        let totalMinutes = Int(endTime.timeIntervalSince(startTime) / 60)
+        return max(0, totalMinutes - breakMinutes)
+    }
+
+    // 見込み給料
+    var estimatedPay: Int {
+        let hours = Double(workMinutes) / 60.0
+        return Int(hours * Double(hourlyWage))
+    }
+}
 
 struct ContentView: View {
+    @Query(sort: \WorkShift.startTime) private var shifts: [WorkShift]
+
+    private var currentMonthShifts: [WorkShift] {
+        shifts.filter { shift in
+            Calendar.current.isDate(shift.startTime, equalTo: Date(), toGranularity: .month)
+            && Calendar.current.isDate(shift.startTime, equalTo: Date(), toGranularity: .year)
+        }
+    }
+
+    private var monthlyPay: Int {
+        currentMonthShifts.reduce(0) { $0 + $1.estimatedPay }
+    }
+
+    private var monthlyWorkMinutes: Int {
+        currentMonthShifts.reduce(0) { $0 + $1.workMinutes }
+    }
+
+    private var nextShift: WorkShift? {
+        shifts
+            .filter { $0.startTime >= Date() }
+            .sorted { $0.startTime < $1.startTime }
+            .first
+    }
+
+    private var recentShifts: [WorkShift] {
+        Array(shifts.sorted { $0.startTime > $1.startTime }.prefix(3))
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -19,6 +91,10 @@ struct ContentView: View {
                     nextShiftSection
 
                     actionButtons
+
+                    if !recentShifts.isEmpty {
+                        registeredShiftsSection
+                    }
 
                     monsterSection
                 }
@@ -45,20 +121,18 @@ struct ContentView: View {
 
     // 今月の給料・勤務時間のサマリー
     private var summarySection: some View {
-        VStack(spacing: 12) {
-            HStack {
-                SummaryCard(
-                    title: "今月の見込み給料",
-                    value: "¥0",
-                    systemImage: "yensign.circle.fill"
-                )
+        HStack {
+            SummaryCard(
+                title: "今月の見込み給料",
+                value: yenText(monthlyPay),
+                systemImage: "yensign.circle.fill"
+            )
 
-                SummaryCard(
-                    title: "勤務時間",
-                    value: "0時間",
-                    systemImage: "clock.fill"
-                )
-            }
+            SummaryCard(
+                title: "勤務時間",
+                value: workHourText(monthlyWorkMinutes),
+                systemImage: "clock.fill"
+            )
         }
     }
 
@@ -73,12 +147,21 @@ struct ContentView: View {
                     .font(.title2)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("未登録")
-                        .font(.headline)
+                    if let nextShift {
+                        Text(nextShift.workplaceName)
+                            .font(.headline)
 
-                    Text("まずはシフトを追加してみよう")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        Text("\(dateTimeText(nextShift.startTime)) 〜 \(timeText(nextShift.endTime))")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("未登録")
+                            .font(.headline)
+
+                        Text("まずはシフトを追加してみよう")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Spacer()
@@ -92,8 +175,8 @@ struct ContentView: View {
     // 主要ボタン
     private var actionButtons: some View {
         VStack(spacing: 12) {
-            Button {
-                // TODO: シフト追加画面へ遷移する
+            NavigationLink {
+                AddShiftView()
             } label: {
                 Label("シフトを追加する", systemImage: "plus.circle.fill")
                     .font(.headline)
@@ -111,6 +194,36 @@ struct ContentView: View {
                     .padding()
             }
             .buttonStyle(.bordered)
+        }
+    }
+
+    // 登録済みシフトの簡易表示
+    private var registeredShiftsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("登録済みシフト")
+                .font(.headline)
+
+            ForEach(recentShifts, id: \.id) { shift in
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(shift.workplaceName)
+                            .font(.headline)
+
+                        Text("\(dateTimeText(shift.startTime)) 〜 \(timeText(shift.endTime))")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Text(yenText(shift.estimatedPay))
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                }
+                .padding()
+                .background(Color(.secondarySystemGroupedBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+            }
         }
     }
 
@@ -138,6 +251,148 @@ struct ContentView: View {
             .frame(maxWidth: .infinity)
             .background(Color(.secondarySystemGroupedBackground))
             .clipShape(RoundedRectangle(cornerRadius: 20))
+        }
+    }
+
+    private func yenText(_ amount: Int) -> String {
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "JPY"
+        formatter.maximumFractionDigits = 0
+
+        return formatter.string(from: NSNumber(value: amount)) ?? "¥\(amount)"
+    }
+
+    private func workHourText(_ minutes: Int) -> String {
+        let hours = Double(minutes) / 60.0
+
+        if hours.truncatingRemainder(dividingBy: 1) == 0 {
+            return "\(Int(hours))時間"
+        } else {
+            return String(format: "%.1f時間", hours)
+        }
+    }
+
+    private func dateTimeText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.dateFormat = "M/d(E) HH:mm"
+        return formatter.string(from: date)
+    }
+
+    private func timeText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
+    }
+}
+
+// シフト追加画面
+struct AddShiftView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var workplaceName = ""
+    @State private var startTime = Date()
+    @State private var endTime = Calendar.current.date(byAdding: .hour, value: 6, to: Date()) ?? Date()
+    @State private var hourlyWage = "1200"
+    @State private var breakMinutes = "0"
+    @State private var memo = ""
+
+    @State private var showAlert = false
+    @State private var alertMessage = ""
+
+    var body: some View {
+        Form {
+            Section("勤務情報") {
+                TextField("勤務先 例：ROOTS渋谷", text: $workplaceName)
+
+                DatePicker(
+                    "開始",
+                    selection: $startTime,
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+
+                DatePicker(
+                    "終了",
+                    selection: $endTime,
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+            }
+
+            Section("給料情報") {
+                TextField("時給 例：1200", text: $hourlyWage)
+                    .keyboardType(.numberPad)
+
+                TextField("休憩時間（分）例：60", text: $breakMinutes)
+                    .keyboardType(.numberPad)
+            }
+
+            Section("メモ") {
+                TextField("メモ 例：遅番、ヘルプなど", text: $memo, axis: .vertical)
+                    .lineLimit(3...5)
+            }
+
+            Section {
+                Button {
+                    saveShift()
+                } label: {
+                    Text("保存する")
+                        .fontWeight(.bold)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+        }
+        .navigationTitle("シフト追加")
+        .navigationBarTitleDisplayMode(.inline)
+        .alert("保存できません", isPresented: $showAlert) {
+            Button("OK") {}
+        } message: {
+            Text(alertMessage)
+        }
+    }
+
+    private func saveShift() {
+        let trimmedWorkplaceName = workplaceName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalWorkplaceName = trimmedWorkplaceName.isEmpty ? "バイト先未設定" : trimmedWorkplaceName
+
+        guard endTime > startTime else {
+            alertMessage = "終了時間は開始時間より後にしてください。"
+            showAlert = true
+            return
+        }
+
+        guard let wage = Int(hourlyWage), wage > 0 else {
+            alertMessage = "時給は1円以上の数字で入力してください。"
+            showAlert = true
+            return
+        }
+
+        guard let breakValue = Int(breakMinutes), breakValue >= 0 else {
+            alertMessage = "休憩時間は0以上の数字で入力してください。"
+            showAlert = true
+            return
+        }
+
+        let newShift = WorkShift(
+            workplaceName: finalWorkplaceName,
+            startTime: startTime,
+            endTime: endTime,
+            hourlyWage: wage,
+            breakMinutes: breakValue,
+            memo: memo
+        )
+
+        modelContext.insert(newShift)
+
+        do {
+            try modelContext.save()
+            dismiss()
+        } catch {
+            alertMessage = "保存中にエラーが発生しました。"
+            showAlert = true
         }
     }
 }
@@ -171,4 +426,5 @@ struct SummaryCard: View {
 
 #Preview {
     ContentView()
+        .modelContainer(for: WorkShift.self, inMemory: true)
 }
