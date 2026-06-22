@@ -195,8 +195,8 @@ struct ContentView: View {
             }
             .buttonStyle(.bordered)
 
-            Button {
-                // TODO: カレンダー画面へ遷移する
+            NavigationLink {
+                CalendarMonthView()
             } label: {
                 Label("カレンダーを見る", systemImage: "calendar")
                     .font(.headline)
