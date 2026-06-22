@@ -306,6 +306,7 @@ struct ContentView: View {
 struct AddShiftView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Query(sort: \WorkPlace.createdAt, order: .reverse) private var workPlaces: [WorkPlace]
 
     @State private var workplaceName = ""
     @State private var startTime = Date()
@@ -313,6 +314,7 @@ struct AddShiftView: View {
     @State private var hourlyWage = "1200"
     @State private var breakMinutes = "0"
     @State private var memo = ""
+    @State private var selectedWorkPlaceID: UUID?
 
     @State private var showAlert = false
     @State private var alertMessage = ""
@@ -320,6 +322,17 @@ struct AddShiftView: View {
     var body: some View {
         Form {
             Section("勤務情報") {
+                if !workPlaces.isEmpty {
+                    Picker("登録済みバイト先", selection: $selectedWorkPlaceID) {
+                        Text("選択なし").tag(UUID?.none)
+
+                        ForEach(workPlaces, id: \.id) { workPlace in
+                            Text(workPlace.name).tag(Optional(workPlace.id))
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+
                 TextField("勤務先 例：ROOTS渋谷", text: $workplaceName)
 
                 DatePicker(
@@ -369,11 +382,27 @@ struct AddShiftView: View {
         .onChange(of: endTime) {
             applyAutomaticBreakTime()
         }
+        .onChange(of: selectedWorkPlaceID) {
+            applySelectedWorkPlace()
+        }
         .alert("保存できません", isPresented: $showAlert) {
             Button("OK") {}
         } message: {
             Text(alertMessage)
         }
+    }
+
+    private func applySelectedWorkPlace() {
+        guard let selectedWorkPlaceID,
+              let workPlace = workPlaces.first(where: { $0.id == selectedWorkPlaceID }) else {
+            return
+        }
+
+        workplaceName = workPlace.name
+        hourlyWage = String(workPlace.hourlyWage)
+
+        // 休憩時間はバイト先設定ではなく、勤務時間から自動計算する
+        applyAutomaticBreakTime()
     }
 
     private func applyAutomaticBreakTime() {
