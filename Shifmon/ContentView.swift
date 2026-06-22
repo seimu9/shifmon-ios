@@ -19,6 +19,7 @@ final class WorkShift {
     var breakMinutes: Int
     var memo: String
     var createdAt: Date
+    var calendarEventIdentifier: String? = nil
 
     init(
         workplaceName: String,
@@ -456,7 +457,12 @@ struct AddShiftView: View {
                 startTime: startTime,
                 endTime: endTime,
                 memo: memo
-            )
+            ) { eventIdentifier in
+                if let eventIdentifier {
+                    newShift.calendarEventIdentifier = eventIdentifier
+                    try? modelContext.save()
+                }
+            }
 
             dismiss()
         } catch {
@@ -499,6 +505,7 @@ struct ShiftListView: View {
     private func deleteShifts(at offsets: IndexSet) {
         for index in offsets {
             let shift = shifts[index]
+            CalendarEventManager.shared.deleteCalendarEvent(identifier: shift.calendarEventIdentifier)
             modelContext.delete(shift)
         }
 

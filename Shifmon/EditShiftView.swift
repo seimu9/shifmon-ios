@@ -132,6 +132,21 @@ struct EditShiftView: View {
 
         do {
             try modelContext.save()
+
+            CalendarEventManager.shared.updateShiftCalendarEvent(
+                identifier: shift.calendarEventIdentifier,
+                workplaceName: finalWorkplaceName,
+                startTime: startTime,
+                endTime: endTime,
+                memo: memo
+            ) { eventIdentifier in
+                if shift.calendarEventIdentifier == nil,
+                   let eventIdentifier {
+                    shift.calendarEventIdentifier = eventIdentifier
+                    try? modelContext.save()
+                }
+            }
+
             dismiss()
         } catch {
             alertMessage = "保存中にエラーが発生しました。"
