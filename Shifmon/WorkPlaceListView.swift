@@ -74,6 +74,14 @@ struct WorkPlaceRowView: View {
             .font(.caption)
             .foregroundStyle(.secondary)
 
+            Label("\(workPlace.openingTimeText) 〜 \(workPlace.closingTimeText)", systemImage: "clock")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text("全日ワード：\(workPlace.fullDayKeywords)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
             if !workPlace.memo.isEmpty {
                 Text(workPlace.memo)
                     .font(.caption)
@@ -92,6 +100,11 @@ struct AddWorkPlaceView: View {
     @State private var name = ""
     @State private var hourlyWage = "1200"
     @State private var defaultBreakMinutes = "0"
+
+    @State private var openingTimeText = "12:10"
+    @State private var closingTimeText = "23:00"
+    @State private var fullDayKeywords = "全日, オーラス, OL, ol, 通し"
+
     @State private var memo = ""
 
     @State private var showAlert = false
@@ -107,6 +120,20 @@ struct AddWorkPlaceView: View {
 
                 TextField("標準休憩時間（分）例：60", text: $defaultBreakMinutes)
                     .keyboardType(.numberPad)
+            }
+
+            Section("全日・オーラス設定") {
+                TextField("開店時間 例：12:10 / 1210", text: $openingTimeText)
+                    .keyboardType(.numbersAndPunctuation)
+
+                TextField("閉店時間 例：23:00 / 2300", text: $closingTimeText)
+                    .keyboardType(.numbersAndPunctuation)
+
+                TextField("全日キーワード", text: $fullDayKeywords)
+
+                Text("例：全日, オーラス, OL, ol, 通し")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("メモ") {
@@ -154,10 +181,25 @@ struct AddWorkPlaceView: View {
             return
         }
 
+        guard let normalizedOpeningTime = normalizeTimeInput(openingTimeText) else {
+            alertMessage = "開店時間を正しく入力してください。例：12:10 / 1210"
+            showAlert = true
+            return
+        }
+
+        guard let normalizedClosingTime = normalizeTimeInput(closingTimeText) else {
+            alertMessage = "閉店時間を正しく入力してください。例：23:00 / 2300"
+            showAlert = true
+            return
+        }
+
         let newWorkPlace = WorkPlace(
             name: trimmedName,
             hourlyWage: wage,
             defaultBreakMinutes: breakValue,
+            openingTimeText: normalizedOpeningTime,
+            closingTimeText: normalizedClosingTime,
+            fullDayKeywords: fullDayKeywords,
             memo: memo
         )
 
@@ -170,5 +212,85 @@ struct AddWorkPlaceView: View {
             alertMessage = "保存中にエラーが発生しました。"
             showAlert = true
         }
+    }
+
+    private func normalizeTimeInput(_ input: String) -> String? {
+        let text = input
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "：", with: ":")
+            .replacingOccurrences(of: "時", with: ":")
+            .replacingOccurrences(of: "分", with: "")
+
+        if text.contains(":") {
+            let parts = text.split(separator: ":").map(String.init)
+
+            guard let hour = Int(parts[safe: 0] ?? ""),
+                  hour >= 0,
+                  hour <= 29 else {
+                return nil
+            }
+
+            let minute: Int
+
+            if let minuteText = parts[safe: 1], !minuteText.isEmpty {
+                guard let parsedMinute = Int(minuteText),
+                      parsedMinute >= 0,
+                      parsedMinute <= 59 else {
+                    return nil
+                }
+
+                minute = parsedMinute
+            } else {
+                minute = 0
+            }
+
+            return String(format: "%d:%02d", hour, minute)
+        }
+
+        let digits = text.filter { $0.isNumber }
+
+        if digits.count == 4 {
+            let hourText = String(digits.prefix(2))
+            let minuteText = String(digits.suffix(2))
+
+            guard let hour = Int(hourText),
+                  let minute = Int(minuteText),
+                  hour >= 0,
+                  hour <= 29,
+                  minute >= 0,
+                  minute <= 59 else {
+                return nil
+            }
+
+            return String(format: "%d:%02d", hour, minute)
+        }
+
+        if digits.count == 3 {
+            let hourText = String(digits.prefix(1))
+            let minuteText = String(digits.suffix(2))
+
+            guard let hour = Int(hourText),
+                  let minute = Int(minuteText),
+                  hour >= 0,
+                  hour <= 29,
+                  minute >= 0,
+                  minute <= 59 else {
+                return nil
+            }
+
+            return String(format: "%d:%02d", hour, minute)
+        }
+
+        if digits.count <= 2, let hour = Int(digits), hour >= 0, hour <= 29 {
+            return String(format: "%d:00", hour)
+        }
+
+        return nil
+    }
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }

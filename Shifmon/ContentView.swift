@@ -215,6 +215,26 @@ struct ContentView: View {
                     .padding()
             }
             .buttonStyle(.bordered)
+
+            NavigationLink {
+                ShiftScreenshotImportView()
+            } label: {
+                Label("スクショから読み取る", systemImage: "doc.viewfinder")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+            }
+            .buttonStyle(.bordered)
+
+            NavigationLink {
+                TextShiftImportView()
+            } label: {
+                Label("テキストから読み取る", systemImage: "text.badge.checkmark")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+            }
+            .buttonStyle(.bordered)
         }
     }
 
