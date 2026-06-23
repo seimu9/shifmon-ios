@@ -11,21 +11,25 @@ import SwiftData
 // シフト情報を保存するデータモデル
 @Model
 final class WorkShift {
-    var id: UUID
-    var workplaceName: String
-    var startTime: Date
-    var endTime: Date
-    var hourlyWage: Int
-    var breakMinutes: Int
-    var memo: String
-    var createdAt: Date
-    var calendarEventIdentifier: String? = nil
+    var id: UUID = UUID()
+    var workplaceName: String = ""
+    var startTime: Date = Date()
+    var endTime: Date = Date()
+    var hourlyWage: Int = 1200
+    var nightHourlyWage: Int = 1500
+    var transportationCost: Int = 0
+    var breakMinutes: Int = 0
+    var memo: String = ""
+    var createdAt: Date = Date()
+    var calendarEventIdentifier: String?
 
     init(
         workplaceName: String,
         startTime: Date,
         endTime: Date,
         hourlyWage: Int,
+        nightHourlyWage: Int = 0,
+        transportationCost: Int = 0,
         breakMinutes: Int,
         memo: String = ""
     ) {
@@ -34,9 +38,12 @@ final class WorkShift {
         self.startTime = startTime
         self.endTime = endTime
         self.hourlyWage = hourlyWage
+        self.nightHourlyWage = nightHourlyWage > 0 ? nightHourlyWage : WorkPlace.defaultNightHourlyWage(for: hourlyWage)
+        self.transportationCost = transportationCost
         self.breakMinutes = breakMinutes
         self.memo = memo
         self.createdAt = Date()
+        self.calendarEventIdentifier = nil
     }
 
     // 休憩時間を引いた実働時間（分）
@@ -45,10 +52,67 @@ final class WorkShift {
         return max(0, totalMinutes - breakMinutes)
     }
 
-    // 見込み給料
+    var effectiveNightHourlyWage: Int {
+        nightHourlyWage > 0 ? nightHourlyWage : WorkPlace.defaultNightHourlyWage(for: hourlyWage)
+    }
+
+    var rawWorkMinutes: Int {
+        max(0, Int(endTime.timeIntervalSince(startTime) / 60))
+    }
+
+    var nightWorkMinutes: Int {
+        guard rawWorkMinutes > 0, workMinutes > 0 else { return 0 }
+
+        let rawNightMinutes = Self.nightMinutesBetween(startTime: startTime, endTime: endTime)
+        let paidRatio = Double(workMinutes) / Double(rawWorkMinutes)
+        let paidNightMinutes = Int((Double(rawNightMinutes) * paidRatio).rounded())
+
+        return min(workMinutes, max(0, paidNightMinutes))
+    }
+
+    var regularWorkMinutes: Int {
+        max(0, workMinutes - nightWorkMinutes)
+    }
+
+    // 見込み給料：通常給 + 深夜給 + 交通費
     var estimatedPay: Int {
-        let hours = Double(workMinutes) / 60.0
-        return Int(hours * Double(hourlyWage))
+        guard workMinutes > 0 else {
+            return transportationCost
+        }
+
+        let regularPay = Double(regularWorkMinutes) * Double(hourlyWage) / 60.0
+        let nightPay = Double(nightWorkMinutes) * Double(effectiveNightHourlyWage) / 60.0
+
+        return Int((regularPay + nightPay).rounded()) + transportationCost
+    }
+
+    private static func nightMinutesBetween(startTime: Date, endTime: Date) -> Int {
+        guard endTime > startTime else { return 0 }
+
+        let calendar = Calendar.current
+        let startDay = calendar.startOfDay(for: startTime)
+        let endDay = calendar.startOfDay(for: endTime)
+        let dayCount = calendar.dateComponents([.day], from: startDay, to: endDay).day ?? 0
+
+        var totalMinutes = 0
+
+        for offset in -1...(dayCount + 1) {
+            guard let day = calendar.date(byAdding: .day, value: offset, to: startDay),
+                  let nightStart = calendar.date(bySettingHour: 22, minute: 0, second: 0, of: day),
+                  let nextDay = calendar.date(byAdding: .day, value: 1, to: day),
+                  let nightEnd = calendar.date(bySettingHour: 5, minute: 0, second: 0, of: nextDay) else {
+                continue
+            }
+
+            let overlapStart = max(startTime, nightStart)
+            let overlapEnd = min(endTime, nightEnd)
+
+            if overlapEnd > overlapStart {
+                totalMinutes += Int(overlapEnd.timeIntervalSince(overlapStart) / 60)
+            }
+        }
+
+        return totalMinutes
     }
 }
 
@@ -329,23 +393,30 @@ struct AddShiftView: View {
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \WorkPlace.createdAt, order: .reverse) private var workPlaces: [WorkPlace]
 
+    @State private var selectedWorkPlaceID: UUID?
     @State private var workplaceName = ""
     @State private var startTime = Date()
     @State private var endTime = Calendar.current.date(byAdding: .hour, value: 6, to: Date()) ?? Date()
     @State private var hourlyWage = "1200"
+    @State private var nightHourlyWage = "1500"
+    @State private var transportationCost = "0"
     @State private var breakMinutes = "0"
     @State private var memo = ""
-    @State private var selectedWorkPlaceID: UUID?
 
     @State private var showAlert = false
     @State private var alertMessage = ""
+
+    private var selectedWorkPlace: WorkPlace? {
+        guard let selectedWorkPlaceID else { return nil }
+        return workPlaces.first { $0.id == selectedWorkPlaceID }
+    }
 
     var body: some View {
         Form {
             Section("勤務情報") {
                 if !workPlaces.isEmpty {
                     Picker("登録済みバイト先", selection: $selectedWorkPlaceID) {
-                        Text("選択なし").tag(UUID?.none)
+                        Text("手入力").tag(Optional<UUID>.none)
 
                         ForEach(workPlaces, id: \.id) { workPlace in
                             Text(workPlace.name).tag(Optional(workPlace.id))
@@ -373,6 +444,12 @@ struct AddShiftView: View {
                 TextField("時給 例：1200", text: $hourlyWage)
                     .keyboardType(.numberPad)
 
+                TextField("深夜時給 例：1500 / 0なら通常時給×1.25", text: $nightHourlyWage)
+                    .keyboardType(.numberPad)
+
+                TextField("交通費 例：500 / なしなら0", text: $transportationCost)
+                    .keyboardType(.numberPad)
+
                 TextField("休憩時間（分）例：60", text: $breakMinutes)
                     .keyboardType(.numberPad)
             }
@@ -395,16 +472,21 @@ struct AddShiftView: View {
         .navigationTitle("シフト追加")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
+            if selectedWorkPlaceID == nil {
+                selectedWorkPlaceID = workPlaces.first?.id
+            }
+
+            applySelectedWorkPlaceSettings()
             applyAutomaticBreakTime()
+        }
+        .onChange(of: selectedWorkPlaceID) {
+            applySelectedWorkPlaceSettings()
         }
         .onChange(of: startTime) {
             applyAutomaticBreakTime()
         }
         .onChange(of: endTime) {
             applyAutomaticBreakTime()
-        }
-        .onChange(of: selectedWorkPlaceID) {
-            applySelectedWorkPlace()
         }
         .alert("保存できません", isPresented: $showAlert) {
             Button("OK") {}
@@ -413,17 +495,14 @@ struct AddShiftView: View {
         }
     }
 
-    private func applySelectedWorkPlace() {
-        guard let selectedWorkPlaceID,
-              let workPlace = workPlaces.first(where: { $0.id == selectedWorkPlaceID }) else {
-            return
-        }
+    private func applySelectedWorkPlaceSettings() {
+        guard let selectedWorkPlace else { return }
 
-        workplaceName = workPlace.name
-        hourlyWage = String(workPlace.hourlyWage)
-
-        // 休憩時間はバイト先設定ではなく、勤務時間から自動計算する
-        applyAutomaticBreakTime()
+        workplaceName = selectedWorkPlace.name
+        hourlyWage = String(selectedWorkPlace.hourlyWage)
+        nightHourlyWage = String(selectedWorkPlace.effectiveNightHourlyWage)
+        transportationCost = String(selectedWorkPlace.transportationCost)
+        breakMinutes = String(selectedWorkPlace.defaultBreakMinutes)
     }
 
     private func applyAutomaticBreakTime() {
@@ -452,6 +531,25 @@ struct AddShiftView: View {
             return
         }
 
+        let trimmedNightHourlyWage = nightHourlyWage.trimmingCharacters(in: .whitespacesAndNewlines)
+        let nightWage: Int
+
+        if trimmedNightHourlyWage.isEmpty || trimmedNightHourlyWage == "0" {
+            nightWage = WorkPlace.defaultNightHourlyWage(for: wage)
+        } else if let parsedNightWage = Int(trimmedNightHourlyWage), parsedNightWage > 0 {
+            nightWage = parsedNightWage
+        } else {
+            alertMessage = "深夜時給は0以上の数字で入力してください。"
+            showAlert = true
+            return
+        }
+
+        guard let transportation = Int(transportationCost), transportation >= 0 else {
+            alertMessage = "交通費は0以上の数字で入力してください。"
+            showAlert = true
+            return
+        }
+
         guard let breakValue = Int(breakMinutes), breakValue >= 0 else {
             alertMessage = "休憩時間は0以上の数字で入力してください。"
             showAlert = true
@@ -463,6 +561,8 @@ struct AddShiftView: View {
             startTime: startTime,
             endTime: endTime,
             hourlyWage: wage,
+            nightHourlyWage: nightWage,
+            transportationCost: transportation,
             breakMinutes: breakValue,
             memo: memo
         )
@@ -472,21 +572,23 @@ struct AddShiftView: View {
         do {
             try modelContext.save()
 
-            CalendarEventManager.shared.addShiftToCalendar(
-                workplaceName: finalWorkplaceName,
-                startTime: startTime,
-                endTime: endTime,
-                memo: memo
-            ) { eventIdentifier in
-                if let eventIdentifier {
-                    newShift.calendarEventIdentifier = eventIdentifier
-                    try? modelContext.save()
+            if selectedWorkPlace?.isCalendarSyncEnabled ?? true {
+                CalendarEventManager.shared.addShiftToCalendar(
+                    workplaceName: finalWorkplaceName,
+                    startTime: startTime,
+                    endTime: endTime,
+                    memo: memo
+                ) { eventIdentifier in
+                    if let eventIdentifier {
+                        newShift.calendarEventIdentifier = eventIdentifier
+                        try? modelContext.save()
+                    }
                 }
             }
 
             dismiss()
         } catch {
-            alertMessage = "保存中にエラーが発生しました。"
+            alertMessage = "保存中にエラーが発生しました。\n\(error.localizedDescription)"
             showAlert = true
         }
     }

@@ -16,7 +16,7 @@ final class WorkPlace {
 
     // 給料設定
     var hourlyWage: Int = 1200
-    var nightHourlyWage: Int = 0
+    var nightHourlyWage: Int = 1500
     var transportationCost: Int = 0
 
     // 給料日設定
@@ -45,11 +45,7 @@ final class WorkPlace {
     }
 
     var effectiveNightHourlyWage: Int {
-        if nightHourlyWage > 0 {
-            return nightHourlyWage
-        } else {
-            return Self.defaultNightHourlyWage(for: hourlyWage)
-        }
+        nightHourlyWage > 0 ? nightHourlyWage : Self.defaultNightHourlyWage(for: hourlyWage)
     }
 
     static func defaultNightHourlyWage(for hourlyWage: Int) -> Int {
@@ -73,7 +69,7 @@ final class WorkPlace {
         self.id = UUID()
         self.name = name
         self.hourlyWage = hourlyWage
-        self.nightHourlyWage = nightHourlyWage
+        self.nightHourlyWage = nightHourlyWage > 0 ? nightHourlyWage : Self.defaultNightHourlyWage(for: hourlyWage)
         self.transportationCost = transportationCost
         self.closingDay = closingDay
         self.payday = payday

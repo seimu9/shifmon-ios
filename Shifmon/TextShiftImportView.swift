@@ -451,21 +451,25 @@ struct TextShiftImportView: View {
                 startTime: startTime,
                 endTime: endTime,
                 hourlyWage: selectedWorkPlace.hourlyWage,
+                nightHourlyWage: selectedWorkPlace.effectiveNightHourlyWage,
+                transportationCost: selectedWorkPlace.transportationCost,
                 breakMinutes: breakMinutes,
                 memo: "テキスト読み取りから登録\n元テキスト：\(candidate.sourceLine)"
             )
 
             modelContext.insert(newShift)
 
-            CalendarEventManager.shared.addShiftToCalendar(
-                workplaceName: selectedWorkPlace.name,
-                startTime: startTime,
-                endTime: endTime,
-                memo: newShift.memo
-            ) { eventIdentifier in
-                if let eventIdentifier {
-                    newShift.calendarEventIdentifier = eventIdentifier
-                    try? modelContext.save()
+            if selectedWorkPlace.isCalendarSyncEnabled {
+                CalendarEventManager.shared.addShiftToCalendar(
+                    workplaceName: selectedWorkPlace.name,
+                    startTime: startTime,
+                    endTime: endTime,
+                    memo: newShift.memo
+                ) { eventIdentifier in
+                    if let eventIdentifier {
+                        newShift.calendarEventIdentifier = eventIdentifier
+                        try? modelContext.save()
+                    }
                 }
             }
 

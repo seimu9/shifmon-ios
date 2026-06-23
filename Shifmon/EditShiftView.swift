@@ -19,6 +19,8 @@ struct EditShiftView: View {
     @State private var startTime: Date
     @State private var endTime: Date
     @State private var hourlyWage: String
+    @State private var nightHourlyWage: String
+    @State private var transportationCost: String
     @State private var breakMinutes: String
     @State private var memo: String
 
@@ -31,6 +33,8 @@ struct EditShiftView: View {
         _startTime = State(initialValue: shift.startTime)
         _endTime = State(initialValue: shift.endTime)
         _hourlyWage = State(initialValue: String(shift.hourlyWage))
+        _nightHourlyWage = State(initialValue: String(shift.effectiveNightHourlyWage))
+        _transportationCost = State(initialValue: String(shift.transportationCost))
         _breakMinutes = State(initialValue: String(shift.breakMinutes))
         _memo = State(initialValue: shift.memo)
     }
@@ -55,6 +59,12 @@ struct EditShiftView: View {
 
             Section("給料情報") {
                 TextField("時給 例：1200", text: $hourlyWage)
+                    .keyboardType(.numberPad)
+
+                TextField("深夜時給 例：1500", text: $nightHourlyWage)
+                    .keyboardType(.numberPad)
+
+                TextField("交通費 例：500", text: $transportationCost)
                     .keyboardType(.numberPad)
 
                 TextField("休憩時間（分）例：60", text: $breakMinutes)
@@ -117,6 +127,25 @@ struct EditShiftView: View {
             return
         }
 
+        let trimmedNightHourlyWage = nightHourlyWage.trimmingCharacters(in: .whitespacesAndNewlines)
+        let nightWage: Int
+
+        if trimmedNightHourlyWage.isEmpty || trimmedNightHourlyWage == "0" {
+            nightWage = WorkPlace.defaultNightHourlyWage(for: wage)
+        } else if let parsedNightWage = Int(trimmedNightHourlyWage), parsedNightWage > 0 {
+            nightWage = parsedNightWage
+        } else {
+            alertMessage = "深夜時給は0以上の数字で入力してください。"
+            showAlert = true
+            return
+        }
+
+        guard let transportation = Int(transportationCost), transportation >= 0 else {
+            alertMessage = "交通費は0以上の数字で入力してください。"
+            showAlert = true
+            return
+        }
+
         guard let breakValue = Int(breakMinutes), breakValue >= 0 else {
             alertMessage = "休憩時間は0以上の数字で入力してください。"
             showAlert = true
@@ -127,6 +156,8 @@ struct EditShiftView: View {
         shift.startTime = startTime
         shift.endTime = endTime
         shift.hourlyWage = wage
+        shift.nightHourlyWage = nightWage
+        shift.transportationCost = transportation
         shift.breakMinutes = breakValue
         shift.memo = memo
 
