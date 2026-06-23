@@ -63,11 +63,13 @@ final class WorkShift {
     var nightWorkMinutes: Int {
         guard rawWorkMinutes > 0, workMinutes > 0 else { return 0 }
 
+        // 深夜時間は22:00〜5:00。
+        // 休憩時間は、まず通常時間から引いた扱いにする。
+        // 例：14:00〜23:00 / 休憩60分
+        // 通常 7時間、深夜 1時間 として計算する。
         let rawNightMinutes = Self.nightMinutesBetween(startTime: startTime, endTime: endTime)
-        let paidRatio = Double(workMinutes) / Double(rawWorkMinutes)
-        let paidNightMinutes = Int((Double(rawNightMinutes) * paidRatio).rounded())
 
-        return min(workMinutes, max(0, paidNightMinutes))
+        return min(workMinutes, max(0, rawNightMinutes))
     }
 
     var regularWorkMinutes: Int {
@@ -305,40 +307,14 @@ struct ContentView: View {
     // 登録済みシフトの簡易表示
     private var registeredShiftsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("登録済みシフト")
-                    .font(.headline)
-
-                Spacer()
-
-                NavigationLink {
-                    ShiftListView()
-                } label: {
-                    Text("すべて見る")
-                        .font(.subheadline)
-                }
-            }
+            Text("登録済みシフト")
+                .font(.headline)
 
             ForEach(recentShifts, id: \.id) { shift in
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(shift.workplaceName)
-                            .font(.headline)
-
-                        Text("\(dateTimeText(shift.startTime)) 〜 \(timeText(shift.endTime))")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    Text(yenText(shift.estimatedPay))
-                        .font(.subheadline)
-                        .fontWeight(.bold)
-                }
-                .padding()
-                .background(Color(.secondarySystemGroupedBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+                ShiftRowView(shift: shift)
+                    .padding()
+                    .background(Color(.secondarySystemGroupedBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
             }
         }
     }
@@ -640,43 +616,6 @@ struct ShiftListView: View {
 }
 
 // シフト一覧の1行
-struct ShiftRowView: View {
-    let shift: WorkShift
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(shift.workplaceName)
-                    .font(.headline)
-
-                Spacer()
-
-                Text(FormatHelper.yenText(shift.estimatedPay))
-                    .font(.subheadline)
-                    .fontWeight(.bold)
-            }
-
-            Text("\(FormatHelper.dateTimeText(shift.startTime)) 〜 \(FormatHelper.timeText(shift.endTime))")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 12) {
-                Label(FormatHelper.workHourText(shift.workMinutes), systemImage: "clock")
-                Label("時給 \(FormatHelper.yenText(shift.hourlyWage))", systemImage: "yensign.circle")
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
-            if !shift.memo.isEmpty {
-                Text(shift.memo)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 2)
-            }
-        }
-        .padding(.vertical, 6)
-    }
-}
 
 // 給料や勤務時間を表示するカード
 struct SummaryCard: View {
@@ -759,6 +698,162 @@ enum FormatHelper {
         return formatter.string(from: date)
     }
 }
+
+
+// MARK: - 給料内訳
+
+extension WorkShift {
+    var regularEstimatedPay: Int {
+        Int((Double(regularWorkMinutes) * Double(hourlyWage) / 60.0).rounded())
+    }
+
+    var nightEstimatedPay: Int {
+        Int((Double(nightWorkMinutes) * Double(effectiveNightHourlyWage) / 60.0).rounded())
+    }
+
+    var workPayWithoutTransportation: Int {
+        regularEstimatedPay + nightEstimatedPay
+    }
+}
+
+struct ShiftRowView: View {
+    let shift: WorkShift
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(shift.workplaceName)
+                        .font(.headline)
+
+                    Text("\(PayBreakdownFormatHelper.dateTimeText(shift.startTime)) 〜 \(PayBreakdownFormatHelper.timeText(shift.endTime))")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    Text("実働 \(PayBreakdownFormatHelper.workHourText(shift.workMinutes))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(PayBreakdownFormatHelper.yenText(shift.estimatedPay))
+                        .font(.headline)
+                        .fontWeight(.bold)
+                        .monospacedDigit()
+
+                    Text("見込み")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            PayBreakdownView(shift: shift)
+        }
+    }
+}
+
+struct PayBreakdownView: View {
+    let shift: WorkShift
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if shift.regularWorkMinutes > 0 {
+                PayBreakdownLine(
+                    title: "通常",
+                    detail: "\(PayBreakdownFormatHelper.workHourText(shift.regularWorkMinutes)) × \(PayBreakdownFormatHelper.yenText(shift.hourlyWage))/h",
+                    amount: PayBreakdownFormatHelper.yenText(shift.regularEstimatedPay)
+                )
+            }
+
+            if shift.nightWorkMinutes > 0 {
+                PayBreakdownLine(
+                    title: "深夜",
+                    detail: "\(PayBreakdownFormatHelper.workHourText(shift.nightWorkMinutes)) × \(PayBreakdownFormatHelper.yenText(shift.effectiveNightHourlyWage))/h",
+                    amount: PayBreakdownFormatHelper.yenText(shift.nightEstimatedPay)
+                )
+            }
+
+            if shift.transportationCost > 0 {
+                PayBreakdownLine(
+                    title: "交通費",
+                    detail: "1勤務あたり",
+                    amount: PayBreakdownFormatHelper.yenText(shift.transportationCost)
+                )
+            }
+        }
+        .padding(10)
+        .background(Color(.tertiarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+struct PayBreakdownLine: View {
+    let title: String
+    let detail: String
+    let amount: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.caption)
+                .fontWeight(.semibold)
+                .frame(width: 44, alignment: .leading)
+
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Text(amount)
+                .font(.caption)
+                .fontWeight(.bold)
+                .monospacedDigit()
+        }
+    }
+}
+
+enum PayBreakdownFormatHelper {
+    static func yenText(_ amount: Int) -> String {
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "JPY"
+        formatter.maximumFractionDigits = 0
+
+        return formatter.string(from: NSNumber(value: amount)) ?? "¥\(amount)"
+    }
+
+    static func workHourText(_ minutes: Int) -> String {
+        let hours = minutes / 60
+        let remainingMinutes = minutes % 60
+
+        if remainingMinutes == 0 {
+            return "\(hours)時間"
+        } else if hours == 0 {
+            return "\(remainingMinutes)分"
+        } else {
+            return "\(hours)時間\(remainingMinutes)分"
+        }
+    }
+
+    static func dateTimeText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.dateFormat = "M/d(E) HH:mm"
+        return formatter.string(from: date)
+    }
+
+    static func timeText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
+    }
+}
+
 
 #Preview {
     ContentView()
